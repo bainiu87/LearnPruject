@@ -29,6 +29,7 @@ has_bad_comment int,
 bad_comment_rate float,
 primary key (id)
 );
+
 load data local infile 'D:\\github\\LearnPruject\\J.D\\JData\\JData_Comment.csv' into table comment FIELDS ESCAPED BY    '\\' TERMINATED BY     ',' ENCLOSED BY   '"' LINES TERMINATED BY   '\n'  ( dt , sku_id ,comment_num, has_bad_comment ,bad_comment_rate );
 create table action_201602(
 id int not null auto_increment,
@@ -65,5 +66,23 @@ cate int,
 brand int,
 primary key (id)
 );
-
+导入数据
 load data local infile 'D:\\github\\LearnPruject\\J.D\\JData\\JData_Action_201602.csv' into table action_201602 FIELDS ESCAPED BY    '\\' TERMINATED BY     ',' ENCLOSED BY   '"' LINES TERMINATED BY   '\n'  ( user_id , sku_id ,time, model_id ,type , cate , brand );
+
+联表查询
+select
+b.user_id,b.sku_id,b.time,b.type,b.cate,b.brand,
+user.age,user.sex,user.user_lv_cd,user.user_reg_tm,
+product.a1,product.a2,product.a3,product.cate,product.brand,
+comment.comment_num,comment.has_bad_comment,comment.bad_comment_rate
+from
+(select * from action_201602 where id<1000000) as b
+left join
+user on b.user_id=user.user_id
+left join product on b.sku_id=product.sku_id
+left join comment on b.sku_id=comment.sku_id and to_days(b.time)=to_days(comment.dt);
+
+获取action 表中用户下单商品的详情 组成label
+select action_201602.time,action_201602.user_id,action_201602.sku_id from action_201602 where type=4;
+select action_201603.time,action_201603.user_id,action_201603.sku_id from action_201603 where type=4;
+select action_201604.time,action_201604.user_id,action_201604.sku_id from action_201604 where type=4;
