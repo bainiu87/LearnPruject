@@ -91,7 +91,7 @@ user.age,user.sex,user.user_lv_cd,user.user_reg_tm,
 product.a1,product.a2,product.a3,product.cate,product.brand,
 comment.comment_num,comment.has_bad_comment,comment.bad_comment_rate
 from
-(select * from action_201602 where id<10000) as b
+(select * from action_201602 where id<1000000) as b
 left join
 user on b.user_id=user.user_id
 left join product on b.sku_id=product.sku_id
