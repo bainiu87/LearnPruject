@@ -1,4 +1,6 @@
 # LearnPruject
+## 训练
+python jd.py train 
 
-" 执行整个流程 ，直接到训练
-python jd.py flow 
+
+遗留问题： 把预测结果整理出来
