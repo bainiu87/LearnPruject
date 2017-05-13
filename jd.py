@@ -5,18 +5,20 @@ import datetime,sys,subprocess
 import matplotlib.pyplot as plt
 
 from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import  roc_auc_score
 
-user_csv = '/home/mi/JData/JData_User.csv'
-prod_csv = '/home/mi/JData/JData_Product.csv'
-comment_csv = '/home/mi/JData/JData_Comment.csv'
+root = '/Users/baipeng/PycharmProjects/try/JData/'
+user_csv = '{root}/JData_User.csv'.format(root=root)
+prod_csv = '{root}/JData_Product.csv'.format(root=root)
+comment_csv = '{root}/JData_Comment.csv'.format(root=root)
 
-action_csv = '/home/mi/JData/JData_Action.csv' #全部的action放一起
+action_csv = '{root}/JData_Action_201602.csv'.format(root=root) #全部的action放一起
 
-headact_csv = '/home/mi/JData/J20.csv'
-act_error_csv = '/home/mi/JData/Je.csv'
+headact_csv = '{root}/J20.csv'.format(root=root)
+act_error_csv = '{root}/Je.csv'.format(root=root)
 
-full_csv = '/home/mi/JData/full.csv'
-label_aux_csv = '/home/mi/JData/label_aux.csv'
+full_csv = '{root}/full.part.csv'.format(root=root)
+label_aux_csv = '{root}/label_aux.csv'.format(root=root)
 
 """
     dt,sku_id,comment_num,has_bad_comment,bad_comment_rate
@@ -84,7 +86,7 @@ def build_sample_inner():
         c = 0
         for L in f:
             if c == 0:
-                print ','.join(full_keys)
+                yield ','.join(full_keys)
                 c+=1  # head line
                 continue
             us = L.strip().split(',')
@@ -152,6 +154,7 @@ def train():
     full_df = pd.read_csv(full_csv, dtype=str )
 
     y = full_df.iloc[:,1:2]
+
     X = full_df.iloc[:, fs]
 
     X =  pd.get_dummies(X)
@@ -159,7 +162,26 @@ def train():
     print X.head()
     lr  = LogisticRegression(C=1 , penalty='l1', tol=0.0001)
     lr.fit(X, y)
-    print 'train_ok'
+    y_hat = lr.predict_proba(X)
+    y_pos_hat = [ i[1] for i in y_hat]
+
+
+    y_real = [ int(i[0])  for i in y.values ]
+    print 'auc = {0}'.format(roc_auc_score(y_real ,y_pos_hat))
+    # predict X
+    # ds  = []
+    # day = datetime.datetime.strptime('2017-04-15', '%Y-%m-%d')
+    # for i in range(5):
+    #     d = (day + datetime.timedelta(days = i )).strftime('%Y-%m-%d')
+    #     ds.append(d)
+    # pred_df = full_df[ full_df['time'].str[0:10] in d ]
+    #
+    # pred_X = pred_df.iloc[:,fs]
+    #
+    # #具体是probability还是别的，需要在考虑
+    # proba = lr.predict_proba(pred_X)
+    # print proba[1:10]
+    # print 'train_ok'
     # subprocess.check_call(' echo train_ok | mail -s coach baipeng1@xiaomi.com ', shell=True)
 
 
@@ -167,6 +189,7 @@ def train():
 
 
 def main():
+    print '-'*10 + 'main ' + '-'*10
     user_df = pd.read_csv(user_csv)
     prod_df = pd.read_csv(prod_csv)
     comment_df = pd.read_csv(comment_csv)
@@ -196,6 +219,7 @@ def main():
 
 if __name__ == '__main__':
 
+    train()
 
     if sys.argv[1] == 'main':
         main()
