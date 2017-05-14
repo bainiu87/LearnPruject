@@ -1,26 +1,33 @@
 #encoding=utf-8
 import pandas as pd
 import  numpy as np
-import datetime,sys,subprocess
+import datetime,sys,subprocess,random
 import matplotlib.pyplot as plt
 
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import  roc_auc_score
+from sklearn.datasets import dump_svmlight_file
+
+from sklearn.metrics import  roc_auc_score , f1_score,fbeta_score
 
 root = '/Users/baipeng/PycharmProjects/try/JData/'
 user_csv = '{root}/JData_User.csv'.format(root=root)
 prod_csv = '{root}/JData_Product.csv'.format(root=root)
+
+
 comment_csv = '{root}/JData_Comment.csv'.format(root=root)
+comment_aux_csv = '{root}/JData_Comment_aux.csv'.format(root=root)
 
 action_csv = '{root}/JData_Action.csv'.format(root=root) #全部的action放一起
 
 headact_csv = '{root}/J20.csv'.format(root=root)
 act_error_csv = '{root}/Je.csv'.format(root=root)
 
-full_csv = '{root}/full.20.csv'.format(root=root)
+full_csv = '{root}/full.csv'.format(root=root)
 label_aux_csv = '{root}/label_aux.csv'.format(root=root)
 label_pos_csv = '{root}/label_pos.csv'.format(root=root)
 
+
+bingo_csv = '{root}/bingo.csv'.format(root=root)
 """
     dt,sku_id,comment_num,has_bad_comment,bad_comment_rate
 
@@ -29,6 +36,63 @@ comment_dts = '2016-02-01,2016-02-08,2016-02-15,2016-02-22,2016-02-29,2016-03-07
 
 keys = ',user_id,sku_id,time,model_id,type,cate_x,brand_x,age,sex,user_lv_cd,user_reg_tm,a1,a2,a3,cate_y,brand_y'.split(',')
 full_keys = ',Y,user_id,sku_id,time,model_id,type,cate_x,brand_x,age,sex,user_lv_cd,user_reg_tm,a1,a2,a3,cate_y,brand_y,comment_num,has_bad_comment,bad_comment_rate'.split(',')
+
+
+
+"""
+comment 热度
+"""
+def search_back(target ,ds):
+    pre = ds[0]
+    for d in ds:
+        if target  <=  d:
+            return pre
+        pre = d
+    return pre
+def search_fore(target ,ds):
+
+    for d in ds:
+        if target  <=  d:
+            return d
+    return d
+def transfer_comment():
+
+    existed =['2016-02-01','2016-02-08','2016-02-15','2016-02-22','2016-02-29','2016-03-07','2016-03-14','2016-03-21','2016-03-28','2016-04-04','2016-04-11','2016-04-15']
+    day = datetime.datetime.strptime('2016-02-01','%Y-%m-%d')
+    days = []
+    for i in range(75):
+        d = (day +   datetime.timedelta(days = i )).strftime('%Y-%m-%d')
+
+        days.append(d)
+
+
+    df = pd.read_csv(comment_csv,dtype=str)
+
+    dfs = [df]
+    # with open(comment_aux_csv,'w') as f:
+    #     keys = 'dt,sku_id,comment_num,has_bad_comment,bad_comment_rate'
+    #     f.write(keys + '\n')
+
+    for d in days:
+        if d not in existed:
+            # build a  comment
+            backday = search_back(d, existed)
+            print 'backday ' , d ,backday
+
+            foreday = search_fore(d, existed)
+
+            back_df = df[df['dt'] == backday].copy()
+            # fore_df = df[df['dt'] == foreday ].copy()
+
+            back_df['dt']  =  d
+            dfs.append(back_df)
+            # back_df['c']
+
+    comment_aux_df = pd.concat(dfs)
+
+    comment_aux_df.to_csv(comment_aux_csv)
+
+
 
 
 
@@ -57,9 +121,11 @@ def transfer_label():
 
 """
 Use Pandas to speed.
+
+merge comment and label_aux
 """
 def build_sample_df(each_out,each_in):
-    comment_df = pd.read_csv(comment_csv,dtype=str)
+    comment_df = pd.read_csv(comment_aux_csv,dtype=str,index_col = 0)
 
     aux_df = pd.read_csv(label_pos_csv,dtype=str)
     print aux_df.head()
@@ -88,6 +154,25 @@ def split_action():
     for name , g in act_user_prod_df.groupby( act_user_prod_df['time'].str[0:10] ):
         g.to_csv( './partial/' + name + '.csv')
 
+def concat_sample():
+    days  = sys.argv[2].split('_')
+
+    dfs = []
+    for d  in days:
+        df = pd.read_csv( '{root}/sample/{day}.csv'.format(
+            root=root,day=d
+        )
+                          ,dtype=str,index_col= 0)
+
+        dfs.append(df)
+
+    cdf  =pd.concat(dfs)
+
+    cdf.to_csv(full_csv)
+
+
+
+
 
 """
 第一列是 label
@@ -97,63 +182,149 @@ def split_action():
 time不能做特征
 """
 def train():
-    fs = []
-    i = -1
+
     with open(full_csv,'r') as f:
         for L in f:
             full_keys = L.strip().split(',')
             break
-    print full_keys
+
+
+
+
+    full_df = pd.read_csv(full_csv, dtype=str )
+    #为了统一用 dummies, pd =1 ,用于预测
+    # predict X
+    ds  = []
+    day = datetime.datetime.strptime('2016-04-14', '%Y-%m-%d')
+    for i in range(5):
+        d = (day + datetime.timedelta(days = i )).strftime('%Y-%m-%d')
+        ds.append(d)
+
+
+    train_days = []
+    day = datetime.datetime.strptime('2016-04-01', '%Y-%m-%d')
+    for i in range(13):
+        d = (day + datetime.timedelta(days = i )).strftime('%Y-%m-%d')
+        train_days.append(d)
+
+    full_df['pd'] =  full_df['time'].map ( lambda  x : 1  if x in ds  else 0 )
+
+    pred_df = full_df[ full_df['pd'] == 1 ]
+
+    train_df = full_df[ full_df['pd'] == 0 ]
+
+    neg_train_df = train_df [ train_df['Y'] == '-1' ]
+    part_neg_df = neg_train_df.sample(frac = 0.3,replace= True )
+    pos_train_df = train_df [ train_df['Y'] == '1' ]
+
+    print 'before sample ' , len(full_df) , ' train = '  ,len(train_df)
+
+    #todo:   随机打乱 行的顺序
+    full_df = pd.concat( [  part_neg_df , pos_train_df ,pred_df ] )
+
+
+    train_df = full_df[ full_df['pd'] == 0 ]
+
+    print 'after sample ' ,  len(full_df), 'train = ' , len(train_df)
+
+
+    full_keys.append('pd')
+    fs = []
+    i = -1
     for k in full_keys:
         i += 1
         # if i == 0:
         #     continue
-        if k in ['time', 'Y','',  'user_reg_tm']: #这些不作为特征
+        if k in [ 'Y','time','', 'dt', 'user_reg_tm']: #这些不作为特征
             continue
         fs.append( i )
     print fs
 
 
-    full_df = pd.read_csv(full_csv, dtype=str )
+    # train_df = full_df[ full_df['pd'] == 0 ]
 
-    print full_df.head()
-    y = full_df['Y']
-    print y.values
-
-    print len(y.values), len(full_df)
-
+    y = train_df['Y']
 
     y_real = [ int(i)  for i in y.values ]
+    y_real_pred = [ int(i) for i in full_df[ full_df['pd'] ==1 ]['Y'].values ]
 
-    print y.head()
+    #为了最后选出 最可能买哪一个商品
+    user_sku_pred_df = full_df[ full_df['pd'] ==1 ][ [ 'user_id','sku_id' ] ]
+    print user_sku_pred_df.head()
+
     X = full_df.iloc[:, fs]
     print 'dummies' * 10
-    X =  pd.get_dummies(X,sparse=True)
+
+    col_dfs = [X['pd']]
+    for col in X.columns:
+        # if col not in ['user_id','sku_id','model_id']:
+        if col  not in ['user_id','pd']:
+            print col , ' begins'
+            dum = pd.get_dummies(X[col],prefix=col,sparse=True)
+            print 'len = '  , len(dum.columns)
+
+            col_dfs.append(dum)
+            # dum.to_dense().to_csv('{col}.csv'.format(col=col))
+            # dum.head().to_csv( '{col}.csv'.format(col = col ),chunksize=1000)
+            print col , ' done'
+
+    # dump_svmlight_file(pd.concat(col_dfs  ,  axis=1 ).as_matrix() , full_df['Y'].astype(float), 'full.withuid.svmlight')
+    # raise "column dummy ok"
+    # X =  pd.get_dummies(X,sparse=True)
+    X = pd.concat(col_dfs, axis =1)
+    # print X.head()
+
+    train_X = X [ X['pd'] == 0 ]
+    pred_X = X[ X['pd'] == 1 ]
+
+
     print 'dummies ok'
-    print X.head()
+
+
     lr  = LogisticRegression(C=1 , penalty='l1', tol=0.0001,verbose=True)
-    lr.fit(X, y)
+    lr.fit(train_X, y)
 
 
-    y_hat = lr.predict_proba(X)
+    y_hat = lr.predict_proba(train_X)
     y_pos_hat = [ i[1] for i in y_hat]
 
-
-
     print 'auc = {0}'.format(roc_auc_score(y_real ,y_pos_hat))
-    # predict X
-    # ds  = []
-    # day = datetime.datetime.strptime('2017-04-15', '%Y-%m-%d')
-    # for i in range(5):
-    #     d = (day + datetime.timedelta(days = i )).strftime('%Y-%m-%d')
-    #     ds.append(d)
-    # pred_df = full_df[ full_df['time'].str[0:10] in d ]
-    #
-    # pred_X = pred_df.iloc[:,fs]
-    #
-    # #具体是probability还是别的，需要在考虑
-    # proba = lr.predict_proba(pred_X)
-    # print proba[1:10]
+
+
+    #具体是probability还是别的，需要在考虑
+    y_hat = lr.predict_proba(pred_X)
+    y_pos_hat = [ i[1] for i in y_hat]
+
+    user_sku_pred_df['score'] = y_pos_hat
+
+    # user_sku_pred_df = user_sku_pred_df[ user_sku_pred_df['score'] > 0.5 ]
+
+
+
+    y_pred = np.argmax(y_hat, axis=1)  #axis is necessary .
+
+    print 'auc = {0}'.format(roc_auc_score(y_real_pred ,y_pos_hat))
+    print 'f1score = {0}'.format(f1_score(y_real_pred ,y_pred))
+
+
+    print "find best sku_id "  + '-'* 10
+    #best pos sku_ids  of user_id
+    us = []
+    sku_s = []
+    for user_id , g  in user_sku_pred_df.groupby('user_id') :
+        user_id = "%.0f" % float(user_id)
+        us.append(user_id )
+        mscore = g['score'].max()
+
+        sku_id =  g[ g['score'] == mscore ]['sku_id'].values[0]
+        print user_id, sku_id
+
+        sku_s.append(sku_id)
+
+    result = pd.DataFrame(data={'sku_id':sku_s ,  'user_id':us  })
+    result.to_csv(bingo_csv,columns=['user_id','sku_id'] , index=False)
+
+
     # print 'train_ok'
     # subprocess.check_call(' echo train_ok | mail -s coach baipeng1@xiaomi.com ', shell=True)
 
@@ -175,6 +346,12 @@ def main():
     label_aux_df = action_df[ action_df['type'] == 4 ][['time','user_id','sku_id']]
     label_aux_df.to_csv(label_aux_csv)
 
+    action_df['time'] = action_df['time'].str[0:10]
+
+    #action count
+    action_df = action_df[['sku_id','user_id','time' , 'type']].groupby(['sku_id','user_id','time' , 'type']).size().reset_index()
+
+
     act_user_df = pd.merge(action_df,user_df,left_on='user_id',right_on='user_id')
 
 
@@ -183,7 +360,7 @@ def main():
 
 
 
-    act_user_prod_df.to_csv('out.csv')
+    act_user_prod_df.to_csv('out.size.csv')
 
     # subprocess.check_call(' echo main_ok | mail -s coach baipeng1@xiaomi.com ',shell=True)
     print act_user_prod_df.head()
@@ -191,7 +368,7 @@ def main():
 
 
 if __name__ == '__main__':
-
+    # train()
 
     if sys.argv[1] == 'main':
         main()
@@ -213,5 +390,9 @@ if __name__ == '__main__':
         split_action()
     elif sys.argv[1] == 'transfer_label':
         transfer_label()
+    elif sys.argv[1] == 'transfer_comment':
+        transfer_comment()
+    elif sys.argv[1] == 'concat':
+        concat_sample()
     else:
         pass
