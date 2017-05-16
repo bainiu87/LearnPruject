@@ -159,7 +159,7 @@ def concat_sample():
 
     dfs = []
     for d  in days:
-        df = pd.read_csv( '{root}/sample/{day}.csv'.format(
+        df = pd.read_csv( '{root}/sample2/{day}.csv'.format(
             root=root,day=d
         )
                           ,dtype=str,index_col= 0)
@@ -209,18 +209,18 @@ def train():
 
     full_df['pd'] =  full_df['time'].map ( lambda  x : 1  if x in ds  else 0 )
 
-    pred_df = full_df[ full_df['pd'] == 1 ]
-
-    train_df = full_df[ full_df['pd'] == 0 ]
-
-    neg_train_df = train_df [ train_df['Y'] == '-1' ]
-    part_neg_df = neg_train_df.sample(frac = 0.3,replace= True )
-    pos_train_df = train_df [ train_df['Y'] == '1' ]
-
-    print 'before sample ' , len(full_df) , ' train = '  ,len(train_df)
-
-    #todo:   随机打乱 行的顺序
-    full_df = pd.concat( [  part_neg_df , pos_train_df ,pred_df ] )
+    # pred_df = full_df[ full_df['pd'] == 1 ]
+    #
+    # train_df = full_df[ full_df['pd'] == 0 ]
+    #
+    # neg_train_df = train_df [ train_df['Y'] == '-1' ]
+    # part_neg_df = neg_train_df.sample(frac = 0.3,replace= True )
+    # pos_train_df = train_df [ train_df['Y'] == '1' ]
+    #
+    # print 'before sample ' , len(full_df) , ' train = '  ,len(train_df)
+    #
+    # #todo:   随机打乱 行的顺序
+    # full_df = pd.concat( [  part_neg_df , pos_train_df ,pred_df ] )
 
 
     train_df = full_df[ full_df['pd'] == 0 ]
@@ -255,10 +255,14 @@ def train():
     X = full_df.iloc[:, fs]
     print 'dummies' * 10
 
-    col_dfs = [X['pd']]
+    col_dfs = []
     for col in X.columns:
         # if col not in ['user_id','sku_id','model_id']:
-        if col  not in ['user_id','pd']:
+        # if col   in ['user_id','sku_id']:
+        # if col   in ['sku_id']:
+        if col in ['user_id','sku_id']:continue
+        
+        if col   in ['sku_id']:
             print col , ' begins'
             dum = pd.get_dummies(X[col],prefix=col,sparse=True)
             print 'len = '  , len(dum.columns)
@@ -267,11 +271,21 @@ def train():
             # dum.to_dense().to_csv('{col}.csv'.format(col=col))
             # dum.head().to_csv( '{col}.csv'.format(col = col ),chunksize=1000)
             print col , ' done'
+        else:
+            """
+            use the real value
+            """
+            print col , ' real value'
+            col_dfs.append(X[[col]])
+            print col , ' done'
+
 
     # dump_svmlight_file(pd.concat(col_dfs  ,  axis=1 ).as_matrix() , full_df['Y'].astype(float), 'full.withuid.svmlight')
     # raise "column dummy ok"
     # X =  pd.get_dummies(X,sparse=True)
     X = pd.concat(col_dfs, axis =1)
+    X = X.fillna(0)
+
     # print X.head()
 
     train_X = X [ X['pd'] == 0 ]
@@ -313,23 +327,85 @@ def train():
     sku_s = []
     for user_id , g  in user_sku_pred_df.groupby('user_id') :
         user_id = "%.0f" % float(user_id)
-        us.append(user_id )
+
         mscore = g['score'].max()
 
         sku_id =  g[ g['score'] == mscore ]['sku_id'].values[0]
-        print user_id, sku_id
+        if mscore >0.5:
+            us.append(user_id )
 
-        sku_s.append(sku_id)
+
+            sku_s.append(sku_id)
+            print user_id, sku_id,mscore
 
     result = pd.DataFrame(data={'sku_id':sku_s ,  'user_id':us  })
-    result.to_csv(bingo_csv,columns=['user_id','sku_id'] , index=False)
+    # result.to_csv(bingo_csv,columns=['user_id','sku_id'] , index=False)
+    result.to_csv('bingo.without_userid.csv',columns=['user_id','sku_id'] , index=False)
 
 
     # print 'train_ok'
     # subprocess.check_call(' echo train_ok | mail -s coach baipeng1@xiaomi.com ', shell=True)
 
 
+"""
+1.浏览（指浏览商品详情页）；
+ 2.加入购物车；3.购物车删除；4.下单；5.关注；6.点击
+"""
 
+def transfer_action():
+    print 'read action '
+    action_df = pd.read_csv('JData_Action_201604.csv')
+
+    print 'user_sku_type_df2'
+    action_df['time'] = action_df['time'].str[0:10]
+
+
+    user_sku_type_df = action_df[['sku_id','user_id','time' , 'type']].groupby(['sku_id','user_id','time' , 'type']).size().reset_index()
+    user_sku_type_df2 = pd.pivot_table(user_sku_type_df, values=0, index=['sku_id','user_id','time' ] , columns='type')
+    print user_sku_type_df2.columns
+    user_sku_type_df2['buy_view'] = user_sku_type_df2[4]/(user_sku_type_df2[1] +1)
+    user_sku_type_df2['buy_click']= user_sku_type_df2[4]/(user_sku_type_df2[6] +1)
+    user_sku_type_df2['buy_focus'] = user_sku_type_df2[4]/(user_sku_type_df2[5] +1)
+    user_sku_type_df2['buy_cart']= user_sku_type_df2[4]/(user_sku_type_df2[2] +1)
+
+
+    user_sku_type_df2.to_csv('user_sku_type.csv')
+
+
+    print 'user_type_df2'
+
+    user_type_df = action_df[['user_id','time','type']].groupby(['user_id','time','type']).size().reset_index()
+    user_type_df2 = pd.pivot_table(user_type_df , values=0 , index=['user_id','time'] , columns= 'type')
+
+    user_type_df2['buy_view'] = user_type_df2[4]/(user_type_df2[1] +1)
+    user_type_df2['buy_click']= user_type_df2[4]/(user_type_df2[6] +1)
+    user_type_df2['buy_focus'] = user_type_df2[4]/(user_type_df2[5] +1)
+    user_type_df2['buy_cart']= user_type_df2[4]/(user_type_df2[2] +1)
+    user_type_df2.to_csv('user_type.csv')
+
+
+    print 'sk_type_df2'
+    sku_type_df = action_df[['sku_id','time','type']].groupby(['sku_id','time','type']).size().reset_index()
+    sku_type_df2 = pd.pivot_table(sku_type_df, values=0 , index=['sku_id','time'],columns= 'type')
+    sku_type_df2['buy_view'] = sku_type_df2[4]/(sku_type_df2[1] +1)
+    sku_type_df2['buy_click']= sku_type_df2[4]/(sku_type_df2[6] +1)
+    sku_type_df2['buy_focus'] = sku_type_df2[4]/(sku_type_df2[5] +1)
+    sku_type_df2['buy_cart']= sku_type_df2[4]/(sku_type_df2[2] +1)
+
+    sku_type_df2.to_csv('sku_type.csv')
+
+
+def action_merge():
+    ust = pd.read_csv('user_sku_type.csv')
+    ut = pd.read_csv('user_type.csv')
+    st = pd.read_csv('sku_type.csv')
+
+    user_merge = pd.merge( ust,ut ,on=['user_id','time'] )
+
+    user_sku_merge = pd.merge(user_merge,st, on =['sku_id','time'])
+
+    for name ,g in user_sku_merge.groupby( user_sku_merge['time']) :
+        g.to_csv('./partial2/' + name + '.csv')
 
 
 def main():
@@ -368,7 +444,7 @@ def main():
 
 
 if __name__ == '__main__':
-    # train()
+    train()
 
     if sys.argv[1] == 'main':
         main()
@@ -392,6 +468,10 @@ if __name__ == '__main__':
         transfer_label()
     elif sys.argv[1] == 'transfer_comment':
         transfer_comment()
+    elif sys.argv[1] == 'transfer_action':
+        transfer_action()
+    elif sys.argv[1] == 'merge_action':
+        action_merge()
     elif sys.argv[1] == 'concat':
         concat_sample()
     else:
